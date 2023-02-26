@@ -16,18 +16,45 @@ private extension EKReminder {
     }
 }
 
-private func format(_ reminder: EKReminder, at index: Int, listName: String? = nil) -> String {
-    let dateString = formattedDueDate(from: reminder).map { " (\($0))" } ?? ""
-    let priorityString = Priority(reminder.mappedPriority).map { " (priority: \($0))" } ?? ""
-    let listString = listName.map { "\($0): " } ?? ""
-    let notesString = reminder.notes.map { " (\($0))" } ?? ""
-    return "\(listString)\(index): \(reminder.title ?? "<unknown>")\(notesString)\(dateString)\(priorityString)"
+private func format(_ reminder: EKReminder, at index: Int, listName: String? = nil, printType: DisplayPrintType? = nil) -> String {
+
+    let displayPrintType = printType ?? .text;
+    
+    if displayPrintType == .json {
+        let obj: [String: Any] = [
+            "index": index,
+            "title": reminder.title ?? "<unknown>",
+            "due": formattedDueDate(from: reminder).map { "\($0)" } ?? "",
+            "priority": Priority(reminder.mappedPriority).map { "\($0)" } ?? "",
+            "listString": listName ?? "",
+            "note": reminder.notes.map { "\($0)" } ?? ""
+        ] as Dictionary
+
+        do {
+            let jsonString = try JSONSerialization.data(withJSONObject: obj)
+            return String(data: jsonString, encoding: .utf8) ?? "<unknown>"
+        } catch {
+            return "<unknown>"
+        }
+    } else {
+        let dateString = formattedDueDate(from: reminder).map { " (\($0))" } ?? ""
+        let priorityString = Priority(reminder.mappedPriority).map { " (priority: \($0))" } ?? ""
+        let listString = listName.map { "\($0): " } ?? ""
+        let notesString = reminder.notes.map { " (\($0))" } ?? ""
+        return "\(listString)\(index): \(reminder.title ?? "<unknown>")\(notesString)\(dateString)\(priorityString)"
+    }
+    
 }
 
 public enum DisplayOptions: String, Decodable {
     case all
     case incomplete
     case complete
+}
+
+public enum DisplayPrintType: String, Decodable {
+    case text
+    case json
 }
 
 public enum Priority: String, ExpressibleByArgument {
@@ -80,7 +107,7 @@ public final class Reminders {
         }
     }
 
-    func showAllReminders(dueOn dueDate: DateComponents?) {
+    func showAllReminders(dueOn dueDate: DateComponents?, printType: DisplayPrintType) {
         let semaphore = DispatchSemaphore(value: 0)
         let calendar = Calendar.current
 
@@ -88,7 +115,7 @@ public final class Reminders {
             for (i, reminder) in reminders.enumerated() {
                 let listName = reminder.calendar.title
                 guard let dueDate = dueDate?.date else {
-                    print(format(reminder, at: i, listName: listName))
+                    print(format(reminder, at: i, listName: listName, printType: printType))
                     continue
                 }
 
@@ -99,7 +126,7 @@ public final class Reminders {
                 let sameDay = calendar.compare(
                     reminderDueDate, to: dueDate, toGranularity: .day) == .orderedSame
                 if sameDay {
-                    print(format(reminder, at: i, listName: listName))
+                    print(format(reminder, at: i, listName: listName, printType: printType))
                 }
             }
 
@@ -109,14 +136,14 @@ public final class Reminders {
         semaphore.wait()
     }
 
-    func showListItems(withName name: String, dueOn dueDate: DateComponents?, displayOptions: DisplayOptions) {
+    func showListItems(withName name: String, dueOn dueDate: DateComponents?, displayOptions: DisplayOptions, printType: DisplayPrintType) {
         let semaphore = DispatchSemaphore(value: 0)
         let calendar = Calendar.current
 
         self.reminders(on: [self.calendar(withName: name)], displayOptions: displayOptions) { reminders in
             for (i, reminder) in reminders.enumerated() {
                 guard let dueDate = dueDate?.date else {
-                    print(format(reminder, at: i))
+                    print(format(reminder, at: i, printType: printType))
                     continue
                 }
 
@@ -127,7 +154,7 @@ public final class Reminders {
                 let sameDay = calendar.compare(
                     reminderDueDate, to: dueDate, toGranularity: .day) == .orderedSame
                 if sameDay {
-                    print(format(reminder, at: i))
+                    print(format(reminder, at: i, printType: printType))
                 }
             }
 
@@ -264,7 +291,13 @@ public final class Reminders {
         reminder.calendar = calendar
         reminder.title = string
         reminder.notes = notes
-        reminder.dueDateComponents = dueDate
+        if let dueDate = dueDate {
+            var newDueDate = dueDate
+            newDueDate.timeZone = nil
+            newDueDate.calendar = nil
+            reminder.dueDateComponents = newDueDate
+            
+        }
         reminder.priority = Int(priority.value.rawValue)
 
         do {

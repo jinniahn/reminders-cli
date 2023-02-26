@@ -21,8 +21,17 @@ private struct ShowAll: ParsableCommand {
         help: "Show only reminders due on this date")
     var dueDate: DateComponents?
 
+    @Flag(help: "Show item with json string")
+    var toJson = false
+    
     func run() {
-        reminders.showAllReminders(dueOn: self.dueDate)
+        var printType = DisplayPrintType.text
+        
+        if self.toJson {
+            printType = .json
+        }
+        
+        reminders.showAllReminders(dueOn: self.dueDate, printType: printType)
     }
 }
 
@@ -41,6 +50,9 @@ private struct Show: ParsableCommand {
     @Flag(help: "Include completed items in output")
     var includeCompleted = false
 
+    @Flag(help: "Show item with json string")
+    var toJson = false
+    
     @Option(
         name: .shortAndLong,
         help: "Show only reminders due on this date")
@@ -55,14 +67,20 @@ private struct Show: ParsableCommand {
 
     func run() {
         var displayOptions = DisplayOptions.incomplete
+        var printType = DisplayPrintType.text
+        
         if self.onlyCompleted {
             displayOptions = .complete
         } else if self.includeCompleted {
             displayOptions = .all
         }
+        
+        if self.toJson {
+            printType = .json
+        }
 
         reminders.showListItems(
-            withName: self.listName, dueOn: self.dueDate, displayOptions: displayOptions)
+            withName: self.listName, dueOn: self.dueDate, displayOptions: displayOptions, printType: printType)
     }
 }
 
@@ -113,7 +131,7 @@ private struct Complete: ParsableCommand {
         help: "The list to complete a reminder on, see 'show-lists' for names",
         completion: .custom(listNameCompletion))
     var listName: String
-
+    
     @Argument(
         help: "The index of the reminder to complete, see 'show' for indexes")
     var index: Int
